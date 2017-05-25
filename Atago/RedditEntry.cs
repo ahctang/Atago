@@ -11,7 +11,11 @@ namespace Atago
         //Post Title
         public string Title { get; set; }
 
+        //Post Body
         public string Body { get; set; }
+
+        //Post Url
+        public string Url { get; set; }
 
     }
 }
