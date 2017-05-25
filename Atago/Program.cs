@@ -11,6 +11,7 @@ namespace Atago
     {
         /// <summary>
         /// The main entry point for the application.
+        /// Atago is a web scrapper that checks for topics related to SKT T1 on the front page of /r/LeagueofLegends
         /// </summary>
         static void Main()
         {
