@@ -11,7 +11,7 @@ namespace Atago
     {
         /// <summary>
         /// The main entry point for the application.
-        /// Atago is a web scrapper that checks for topics related to SKT T1 on the front page of /r/LeagueofLegends
+        /// Atago is a Windows Service that scrubs target subreddits for Donald Trump and corruption related information
         /// </summary>
         static void Main()
         {

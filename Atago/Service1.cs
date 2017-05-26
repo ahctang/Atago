@@ -8,19 +8,36 @@ using System.ServiceProcess;
 using System.Text;
 using System.Threading.Tasks;
 using System.Timers;
+using System.Reflection;
+using Atago.GitExcludedConstants;
+
 using RedditSharp;
+using MongoDB.Driver;
+using MongoDB.Bson.Serialization;
+
 
 namespace Atago
 {
     public partial class Service1 : ServiceBase
     {
-        
+
         #region Fields
 
+        /// <summary>
+        /// Reddit related fields
+        /// </summary>
+        //Page check interval in ms
         private int redditCheckInterval = 30000;
         private Timer timer = new Timer();
         private string subredditName = "/r/leagueoflegends";
+        //Reddit crawler target keywords
+        private string[] keywords = { "SKT", "FAKER", "BANG", "WOLF", "PEANUT", "HUNI" };
 
+        /// <summary>
+        /// MongoDB related fields
+        /// </summary>            
+        private MongoClient dbClient = new MongoClient(PrivateConstants.ConnectionString);
+        
         List<RedditEntry> frontPageList = new List<RedditEntry>();
 
         #endregion
@@ -33,14 +50,17 @@ namespace Atago
 
         protected override void OnStart(string[] args)
         {
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\littl\Documents\Visual Studio 2015\Projects\Atago\debugtext.txt"))
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\log.txt"))
             {
                 file.WriteLine("On start!");
             }
             //Register the tick with the timer
             timer.Interval = redditCheckInterval;
             timer.Elapsed += new ElapsedEventHandler(checkReddit);
-            timer.Start();   
+            timer.Start();
+
+            //Bsonclass map for mongodb
+            BsonClassMap.RegisterClassMap<RedditEntry>();
         }
 
         protected override void OnStop()
@@ -55,53 +75,101 @@ namespace Atago
         //  System.Windows.Threading.DispatcherTimer.Tick handler               
         private void checkReddit(object sender, EventArgs e)
         {
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\littl\Documents\Visual Studio 2015\Projects\Atago\debugtext.txt"))
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\log.txt", true))
             {
                 file.WriteLine("Tick!");
             }
 
             //Query Reddit for all front page stories on /r/lol
             List<RedditEntry> newFrontPageList = getFrontPage();
+            
+            List<RedditEntry> targetPosts = getTargetPosts(newFrontPageList);
 
-            //For debug for now
-            debugDump(newFrontPageList);
+            if (targetPosts.Count != 0)
+            {
+                //Send Windows 10 Notification Here
+
+                //Save to MongoDB
+                var database = dbClient.GetDatabase(PrivateConstants.dbName);
+
+                var collection = database.GetCollection<RedditEntry>("RedditPosts");
+
+                collection.InsertManyAsync(targetPosts); 
+            }
         }
 
+        //Gets the current front page of /r/leagueoflegends
         private List<RedditEntry> getFrontPage()
         {
-            var reddit = new Reddit();
-            var redditUser = reddit.LogIn(User.UserName, User.Password);
-
-            var subreddit = reddit.GetSubreddit(subredditName);
-
-            //Gets the current front page of /r/leagueoflegends
             List<RedditEntry> newFrontPageList = new List<RedditEntry>();
 
-            foreach (var post in subreddit.Hot.Take(25))
+            try
             {
-                RedditEntry buffer = new RedditEntry();
-                buffer.Title = post.Title;
-                buffer.Body = post.SelfText;
-                buffer.Url = post.Url.ToString();
+                var reddit = new Reddit();
+                var redditUser = reddit.LogIn(User.UserName, User.Password);
 
-                newFrontPageList.Add(buffer);
+                var subreddit = reddit.GetSubreddit(subredditName);               
+
+                foreach (var post in subreddit.Hot.Take(25))
+                {
+                    RedditEntry buffer = new RedditEntry();
+                    buffer.Id = post.Id;
+                    buffer.Title = post.Title;
+                    buffer.Date = post.Created.ToShortDateString();
+                    buffer.Body = post.SelfText;
+                    buffer.Url = post.Url.ToString();
+                    buffer.Upvotes = post.Upvotes;
+
+                    newFrontPageList.Add(buffer);
+                }
+
+                return newFrontPageList;
+            }
+            catch
+            {
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\debugtext.txt"))
+                {
+                    file.WriteLine("Exception!");
+                }
             }
 
             return newFrontPageList;
         }
 
-        private void debugDump(List<RedditEntry> RedditFrontPage)
+        private List<RedditEntry> getTargetPosts(List<RedditEntry> newFrontPageList)
         {
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\littl\Documents\Visual Studio 2015\Projects\Atago\debugtext.txt"))
+            //Get new entries only and check titles of new posts for keywords
+            var newPosts = from post in newFrontPageList
+                           where !(frontPageList.Contains(post))
+                           select post;
+            debugDump(newPosts.ToList(), "NewPosts.txt");
+
+            var targetPosts = from post in newPosts
+                              where keywords.All(post.Title.ToUpper().Contains)
+                              select post;
+
+            //Save the current front page for comparison to the next query
+            frontPageList = newFrontPageList;
+            debugDump(targetPosts.ToList(), "TargetPosts.txt");
+
+            return newPosts.ToList<RedditEntry>();
+        }
+
+        private void debugDump(List<RedditEntry> RedditFrontPage, string debugFileName)
+        {
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\" + debugFileName))
             {
-                foreach(var post in RedditFrontPage)
+                foreach (var post in RedditFrontPage)
                 {
-                    file.WriteLine(post.Title);
-                    file.WriteLine(post.Body);
-                    file.WriteLine(post.Url);
-                    file.WriteLine();
+                    Type type = post.GetType();
+                    PropertyInfo[] properties = type.GetProperties();
+                    
+                    foreach(PropertyInfo property in properties)
+                    {
+                        file.WriteLine(property.GetValue(post, null));
+                    }
                 }
-            }                           
+            }
         }
 
         #endregion
