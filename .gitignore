@@ -244,3 +244,7 @@ ModelManifest.xml
 # FAKE - F# Make
 .fake/
 Atago/User\.cs
+
+savedposts\.txt
+
+log\.txt

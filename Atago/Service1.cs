@@ -50,7 +50,7 @@ namespace Atago
 
         protected override void OnStart(string[] args)
         {
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\log.txt"))
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\littl\Documents\Visual Studio 2015\Projects\Atago\log.txt"))
             {
                 file.WriteLine("On start!");
             }
@@ -75,7 +75,7 @@ namespace Atago
         //  System.Windows.Threading.DispatcherTimer.Tick handler               
         private void checkReddit(object sender, EventArgs e)
         {
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\log.txt", true))
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\littl\Documents\Visual Studio 2015\Projects\Atago\log.txt", true))
             {
                 file.WriteLine("Tick!");
             }
@@ -90,11 +90,12 @@ namespace Atago
                 //Send Windows 10 Notification Here
 
                 //Save to MongoDB
+                debugDump(targetPosts, "savedposts.txt", true);
                 var database = dbClient.GetDatabase(PrivateConstants.dbName);
 
                 var collection = database.GetCollection<RedditEntry>("RedditPosts");
 
-                collection.InsertManyAsync(targetPosts); 
+                collection.InsertManyAsync(targetPosts);
             }
         }
 
@@ -103,34 +104,23 @@ namespace Atago
         {
             List<RedditEntry> newFrontPageList = new List<RedditEntry>();
 
-            try
+
+            var reddit = new Reddit();
+            var redditUser = reddit.LogIn(User.UserName, User.Password);
+
+            var subreddit = reddit.GetSubreddit(subredditName);
+
+            foreach (var post in subreddit.Hot.Take(25))
             {
-                var reddit = new Reddit();
-                var redditUser = reddit.LogIn(User.UserName, User.Password);
+                RedditEntry buffer = new RedditEntry();
+                buffer.Id = post.Id;
+                buffer.Title = post.Title;
+                buffer.Date = post.Created.ToShortDateString();
+                buffer.Body = post.SelfText;
+                buffer.Url = post.Url.ToString();
+                buffer.Upvotes = post.Upvotes;
 
-                var subreddit = reddit.GetSubreddit(subredditName);               
-
-                foreach (var post in subreddit.Hot.Take(25))
-                {
-                    RedditEntry buffer = new RedditEntry();
-                    buffer.Id = post.Id;
-                    buffer.Title = post.Title;
-                    buffer.Date = post.Created.ToShortDateString();
-                    buffer.Body = post.SelfText;
-                    buffer.Url = post.Url.ToString();
-                    buffer.Upvotes = post.Upvotes;
-
-                    newFrontPageList.Add(buffer);
-                }
-
-                return newFrontPageList;
-            }
-            catch
-            {
-                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\debugtext.txt"))
-                {
-                    file.WriteLine("Exception!");
-                }
+                newFrontPageList.Add(buffer);
             }
 
             return newFrontPageList;
@@ -140,27 +130,27 @@ namespace Atago
         {
             //Get new entries only and check titles of new posts for keywords
             var newPosts = from post in newFrontPageList
-                           where !(frontPageList.Contains(post))
-                           select post;
-            debugDump(newPosts.ToList(), "NewPosts.txt");
+                                where !(frontPageList.Any(p2 => p2.Id == post.Id))                                
+                                select post;
 
-            var targetPosts = from post in newPosts
-                              where keywords.All(post.Title.ToUpper().Contains)
+            var targetPosts = from post in newFrontPageList
+                              where keywords.Any(keyword => post.Title.ToUpper().Contains(keyword))
                               select post;
-
+            
             //Save the current front page for comparison to the next query
             frontPageList = newFrontPageList;
-            debugDump(targetPosts.ToList(), "TargetPosts.txt");
 
-            return newPosts.ToList<RedditEntry>();
+            List<RedditEntry> returnList = targetPosts.ToList<RedditEntry>();
+
+            return returnList;
         }
 
-        private void debugDump(List<RedditEntry> RedditFrontPage, string debugFileName)
+        private void debugDump(List<RedditEntry> RedditFrontPage, string debugFileName, bool append = false)
         {
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\DicerNet\Atago\" + debugFileName))
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\littl\Documents\Visual Studio 2015\Projects\Atago\" + debugFileName, append))
             {
                 foreach (var post in RedditFrontPage)
-                {
+                {                    
                     Type type = post.GetType();
                     PropertyInfo[] properties = type.GetProperties();
                     
