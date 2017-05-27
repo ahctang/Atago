@@ -27,7 +27,7 @@ namespace Atago
         /// Reddit related fields
         /// </summary>
         //Page check interval in ms
-        private int redditCheckInterval = 30000;
+        private int redditCheckInterval = 1800000;
         private Timer timer = new Timer();
         private string subredditName = "/r/leagueoflegends";
         //Reddit crawler target keywords
@@ -61,6 +61,9 @@ namespace Atago
 
             //Bsonclass map for mongodb
             BsonClassMap.RegisterClassMap<RedditEntry>();
+
+            //Check on startup
+            checkReddit(null, null);
         }
 
         protected override void OnStop()
